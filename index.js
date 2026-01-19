@@ -14,81 +14,77 @@ process.on("unhandledRejection", (err) => {
 
 // ==================== ENVIRONMENT VARIABLES ====================
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
-const GUILD_ID = process.env.GUILD_ID;       // Only notify this server
+const GUILD_ID = process.env.GUILD_ID; // Discord server to monitor
 const TG_TOKEN = process.env.TG_TOKEN;
-const TG_CHAT_ID = process.env.TG_CHAT_ID;
+const TG_CHAT_ID = process.env.TG_CHAT_ID; // Can be comma-separated IDs
 
-// Check for missing environment variables
 if (!DISCORD_TOKEN || !TG_TOKEN || !TG_CHAT_ID || !GUILD_ID) {
   console.error("Error: Missing environment variables!");
   process.exit(1);
 }
 
-// ==================== CREATE DISCORD CLIENT ====================
+// Support multiple Telegram chat IDs
+const TG_CHAT_IDS = TG_CHAT_ID.split(",");
+
+// ==================== DISCORD CLIENT ====================
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers
-  ]
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
 });
 
-// ==================== BOT READY EVENT ====================
 client.once("ready", () => {
   console.log(`Discord bot logged in as ${client.user.tag} ✅`);
 });
 
-// ==================== NEW MEMBER JOIN EVENT ====================
+// ==================== NEW MEMBER EVENT ====================
 client.on("guildMemberAdd", async (member) => {
-  // Only notify if the member joined the specified server
   if (member.guild.id !== GUILD_ID) return;
 
-  try {
-    const message = `🟢 New Discord Member Joined
+  const message = `🟢 New Discord Member Joined
 👤 User: ${member.user.tag}
 🆔 ID: ${member.user.id}
 🏠 Server: ${member.guild.name}
 🕒 Time: ${new Date().toLocaleString()}`;
 
-    console.log(message);
+  console.log(message);
 
-    // Send Telegram message
+  // Send Telegram to all chat IDs
+  for (const chatId of TG_CHAT_IDS) {
     try {
       await axios.post(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
-        chat_id: TG_CHAT_ID,
-        text: message
+        chat_id: chatId,
+        text: message,
       });
-      console.log("Telegram notification sent ✅");
-    } catch (tgErr) {
-      console.error("Telegram API error:", tgErr.message);
+      console.log(`Telegram notification sent to ${chatId} ✅`);
+    } catch (err) {
+      console.error(`Error sending to ${chatId}:`, err.message);
     }
-  } catch (err) {
-    console.error("Error handling new member:", err);
   }
 });
 
-// ==================== TELEGRAM BOT SETUP ====================
+// ==================== TELEGRAM BOT ====================
 const tgBot = new TelegramBot(TG_TOKEN, { polling: true });
 
-// Listen for messages sent to the bot
 tgBot.on("message", (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
 
   console.log(`Received message from ${chatId}: ${text}`);
 
-  // Respond to /start
   if (text === "/start") {
-    tgBot.sendMessage(chatId, "Hello! I am your Discord notifier bot. You will receive notifications here whenever someone joins the server.");
+    tgBot.sendMessage(
+      chatId,
+      "Hello! I am your Discord notifier bot. You will receive notifications here whenever someone joins the server."
+    );
   } else {
-    // Echo any other message
     tgBot.sendMessage(chatId, `You said: "${text}"`);
   }
 });
 
-// ==================== LOGIN BOT ====================
-client.login(DISCORD_TOKEN)
+// ==================== LOGIN DISCORD ====================
+client
+  .login(DISCORD_TOKEN)
   .then(() => console.log("Discord login successful!"))
-  .catch(err => {
+  .catch((err) => {
     console.error("Discord login failed:", err);
-    process.exit(1); // Stop the bot if login fails
+    process.exit(1);
   });
